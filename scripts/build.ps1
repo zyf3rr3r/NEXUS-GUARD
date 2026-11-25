@@ -4,7 +4,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$source = Join-Path $PSScriptRoot '../firmware/NexusS3'
+$firmware = Join-Path $PSScriptRoot '../firmware/NexusS3'
 $fqbn = 'esp32:esp32:esp32s3:UploadSpeed=115200,USBMode=hwcdc,CDCOnBoot=default,MSCOnBoot=default,DFUOnBoot=default,UploadMode=default,CPUFreq=160,FlashMode=qio,FlashSize=16M,PartitionScheme=app3M_fat9M_16MB,DebugLevel=none,PSRAM=opi,LoopCore=1,EventsCore=1,EraseFlash=none,JTAGAdapter=default,ZigbeeMode=default'
 $partitionHash = 'ACE02503447D0F470692E65FA76002F2D77A92DC81CD3813D8AA66718D716DA9'
 $oldData = $env:ARDUINO_DIRECTORIES_DATA
@@ -23,6 +23,18 @@ try {
     $build = New-Item -ItemType Directory -Path (Join-Path $PSScriptRoot "../build/esp32s3-$stamp")
     $buildPath = $build.FullName
     Write-Host "Build directory $buildPath"
+    $source = Join-Path $buildPath 'source/NexusS3'
+    New-Item -ItemType Directory -Path $source | Out-Null
+    Copy-Item -Path (Join-Path $firmware '*') -Destination $source
+    $assets = [ordered]@{ index = 'index.html'; style = 'style.css'; app = 'app.js' }
+    $header = @('#pragma once', 'namespace nexus::web {')
+    foreach ($asset in $assets.GetEnumerator()) {
+        $content = Get-Content -Raw -Encoding utf8 -LiteralPath (Join-Path $PSScriptRoot "../web/$($asset.Value)")
+        if ($content.Contains(')NEXUS"')) { throw "Reserved asset delimiter in $($asset.Value)." }
+        $header += 'inline constexpr char {0}[] = R"NEXUS({1})NEXUS";' -f $asset.Key, $content
+    }
+    $header += '}'
+    [IO.File]::WriteAllLines((Join-Path $source 'web_assets.h'), $header, [Text.UTF8Encoding]::new($false))
     & $ArduinoCli compile --fqbn $fqbn --warnings default --build-path $buildPath `
         --build-property 'compiler.c.elf.extra_flags=-Wl,--wrap=initArduino' $source 2>&1 |
         Tee-Object -FilePath (Join-Path $buildPath 'compile.log')

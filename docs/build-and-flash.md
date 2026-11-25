@@ -16,8 +16,20 @@ Run the pure boot-policy tests from a Visual Studio 2022 x64 Developer Command P
 if not exist build\host mkdir build\host
 cl /nologo /std:c++17 /EHsc /W4 /WX /Fo:build\host\boot_policy_test.obj /Fe:build\host\boot_policy_test.exe tests\host\boot_policy_test.cpp
 build\host\boot_policy_test.exe
+cl /nologo /std:c++17 /EHsc /W4 /WX /Fo:build\host\ /Fe:build\host\guard_test.exe tests\host\guard_test.cpp firmware\NexusS3\guard.cpp
+build\host\guard_test.exe
 ```
+
+Run the desktop and mobile browser fixture with Node.js 24 and local Microsoft Edge:
+
+```powershell
+node tests/host/browser_test.mjs
+```
+
+The browser runner binds loopback and uses a separate temporary browser profile under `build/host`. It serves the production frontend with explicitly substituted API data and exercises browser behavior. ESP32 protocol and radio acceptance require supervised device testing.
 
 ## Physical acceptance gate
 
 Build artifacts are for local verification. A proposed device operation requires explicit approval of the exact artifact and command. Before any upload, identify the active app slot, confirm live partition compatibility and current backup status, and review the exact write regions and recovery path. The ordinary Arduino upload recipe can write bootloader, partition and OTA metadata. Keep those regions out of any proposed app-only operation unless deliberately reviewed and approved. Use the board's UART connector and the documented cooling setup for the first physical acceptance.
+
+After an approved upload, monitor UART at 115200. Confirm the boot build ID and hardware readings, send `A` to request management, then connect one client to the SSID with the displayed password and open the displayed URL. Enter the one-time operator code in Settings when ready to test controls. Apply a refresh preference, cancel a queued stop within the displayed window, and check for `MANAGEMENT STOP CANCELLED` on UART. Then request a second stop and check for both `MANAGEMENT STOP SOURCE BROWSER` and `MANAGEMENT STOP CONFIRMED`. Use `S` for a direct UART stop. Capture logs with the provisioning secrets removed. Stop immediately on an integrity fault, unexpected reset, thermal cutoff or unconfirmed release.

@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>PocketOS | NEXUS-S3</title>
+  <link rel="stylesheet" href="/style.css">
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#pocketos" aria-label="PocketOS home">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>PocketOS <small>NEXUS-S3</small></span>
+    </a>
+    <div class="top-controls">
+      <span id="connection" class="connection" role="status">Connecting</span>
+      <button id="theme" class="quiet" type="button">Theme</button>
+    </div>
+  </header>
+  <div class="layout">
+    <nav aria-label="PocketOS">
+      <a href="#pocketos">Overview</a>
+      <a href="#chipvitals">ChipVitals</a>
+      <a href="#settings">Settings</a>
+    </nav>
+    <main>
+      <div id="offline" class="notice" role="status" hidden>Connection interrupted. Last readings may be stale. Retrying automatically.</div>
+      <section id="pocketos">
+        <div class="heading"><div><h1 tabindex="-1">Device overview</h1><p>Local management and hardware status.</p></div><button id="refresh" class="quiet" type="button">Refresh</button></div>
+        <div class="overview">
+          <section class="panel live">
+            <h2>System health</h2>
+            <dl class="readings">
+              <div><dt>On-chip temperature</dt><dd data-value="temp">…</dd></div>
+              <div><dt>Internal heap free</dt><dd data-value="heap">…</dd></div>
+              <div><dt>PSRAM free</dt><dd data-value="psram">…</dd></div>
+              <div><dt>Uptime</dt><dd data-value="uptime">…</dd></div>
+            </dl>
+            <p class="caption" id="last-seen">Waiting for the first device sample.</p>
+          </section>
+          <section class="panel guard">
+            <h2>NEXUS Guard</h2>
+            <dl class="rows">
+              <div><dt>Management service</dt><dd data-value="state">…</dd></div>
+              <div><dt>Current warning</dt><dd data-value="warning">…</dd></div>
+              <div><dt>Last status</dt><dd data-value="reason">…</dd></div>
+            </dl>
+            <a class="text-action" href="#settings">Manage local access</a>
+          </section>
+        </div>
+        <section class="list-section">
+          <h2>Applications</h2>
+          <ul id="apps" class="list"><li>Waiting for the application registry.</li></ul>
+        </section>
+      </section>
+      <section id="chipvitals" hidden>
+        <div class="heading"><div><h1 tabindex="-1">ChipVitals</h1><p>Hardware readings sampled on the ESP32-S3.</p></div></div>
+        <div class="overview">
+          <section class="panel">
+            <h2>Device and firmware</h2>
+            <dl class="rows">
+              <div><dt>CPU</dt><dd data-value="cpu">…</dd></div>
+              <div><dt>Flash capacity</dt><dd data-value="flash">…</dd></div>
+              <div><dt>On-chip temperature</dt><dd data-value="temp">…</dd></div>
+              <div><dt>FFat</dt><dd data-value="storage">…</dd></div>
+              <div><dt>Firmware</dt><dd data-value="firmware">…</dd></div>
+              <div><dt>Reset reason</dt><dd data-value="reset">…</dd></div>
+              <div><dt>Build ID</dt><dd class="hash" data-value="build">…</dd></div>
+            </dl>
+          </section>
+          <section class="panel">
+            <h2>Memory</h2>
+            <dl class="rows">
+              <div><dt>Internal free</dt><dd data-value="heap">…</dd></div>
+              <div><dt>Internal largest block</dt><dd data-value="heapLargest">…</dd></div>
+              <div><dt>Internal low-water mark</dt><dd data-value="heapMin">…</dd></div>
+              <div><dt>PSRAM total</dt><dd data-value="psramTotal">…</dd></div>
+              <div><dt>PSRAM free</dt><dd data-value="psram">…</dd></div>
+              <div><dt>PSRAM largest block</dt><dd data-value="psramLargest">…</dd></div>
+              <div><dt>PSRAM low-water mark</dt><dd data-value="psramMin">…</dd></div>
+            </dl>
+          </section>
+        </div>
+        <section class="list-section">
+          <h2>Recent readings</h2>
+          <table><thead><tr><th scope="col">Received</th><th scope="col">Temperature</th><th scope="col">Internal free</th><th scope="col">PSRAM free</th></tr></thead>
+            <tbody id="history"><tr><td colspan="4">Waiting for a device sample.</td></tr></tbody></table>
+        </section>
+      </section>
+      <section id="settings" hidden>
+        <div class="heading"><div><h1 tabindex="-1">Settings</h1><p>Management access and dashboard preferences.</p></div></div>
+        <div class="overview">
+          <section class="panel">
+            <h2>Local management</h2>
+            <dl class="rows">
+              <div><dt>Network</dt><dd data-value="network">…</dd></div>
+              <div><dt>Client limit</dt><dd data-value="limit">…</dd></div>
+              <div><dt>Transmit power</dt><dd data-value="power">…</dd></div>
+            </dl>
+            <form id="login">
+              <label for="operator-code">One-time operator code</label>
+              <p class="caption" id="code-help">Read the code from the UART console. Send K there to issue a new one during a session.</p>
+              <div class="form-row"><input id="operator-code" aria-describedby="code-help" type="password" maxlength="32" autocomplete="off" required><button type="submit">Unlock controls</button></div>
+            </form>
+            <div id="controls" hidden>
+              <form id="save">
+                <label for="interval">Telemetry refresh</label>
+                <div class="form-row"><select id="interval"><option value="2">Every 2 seconds</option><option value="3">Every 3 seconds</option><option value="5">Every 5 seconds</option></select><button type="submit">Apply for this boot</button></div>
+              </form>
+              <div class="actions">
+                <button id="stop" class="danger" type="button">Stop management</button>
+                <button id="cancel" class="quiet" type="button" hidden>Cancel stop</button>
+                <button id="logout" class="quiet" type="button">Lock controls</button>
+              </div>
+            </div>
+            <p id="feedback" role="status"></p>
+          </section>
+          <section class="panel">
+            <h2>Guard and service events</h2>
+            <ol id="events" class="list"><li>Waiting for device events.</li></ol>
+            <a class="text-action" href="/api/v1/events" download="nexus-events.json">Export events</a>
+            <p class="caption">After a stop, check UART for release confirmation. Send A there to request a new session.</p>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
