@@ -1,7 +1,10 @@
 #include "../../firmware/NexusS3/guard.h"
 #include "../../firmware/NexusS3/stop_job.h"
+#include "../../firmware/NexusS3/media_arm.h"
+#include "../../firmware/NexusS3/radio_policy.h"
 
 #include <cstdio>
+#include <cstring>
 #include <limits>
 
 using namespace nexus;
@@ -113,5 +116,34 @@ int main() {
   expect(job.cancel(unsent.id, 40000), "failed response can discard its unarmed job");
   job.arm(unsent.id, 40001);
   expect(!job.take(60000), "a cancelled unarmed job cannot be reactivated");
+  MediaArm media;
+  expect(!media.consume(0), "native media output is disarmed on boot");
+  media.arm(100);
+  expect(media.consume(14999) && !media.consume(15000), "native media arming permits one action");
+  media.arm(200);
+  expect(!media.consume(15200), "native media arming expires at its deadline");
+  media.arm(300);
+  media.clear();
+  expect(!media.consume(301), "native USB disarm and disconnect revoke the action");
+
+  Telemetry radioSample{};
+  radioSample.temperatureValid = true;
+  radioSample.temperatureC = 34.3f;
+  radioSample.internal.freeBytes = 230296;
+  radioSample.internal.largestBlockBytes = 188404;
+  radioSample.psram.freeBytes = 8369192;
+  const auto admitted = [&radioSample] {
+    return optionalRadioBlock(ServiceState::Running, Reason::None, 38.3f, radioSample);
+  };
+  expect(admitted() == nullptr, "radio admits a cool sample with headroom");
+  radioSample.temperatureC = 35.3f;
+  expect(std::strcmp(admitted(), "RADIO_THERMAL_MARGIN") == 0, "radio rejects at the existing three-degree margin");
+  radioSample.temperatureC = 34.3f;
+  radioSample.internal.freeBytes = 152520;
+  expect(admitted() == nullptr, "radio admits observed Wi-Fi+NimBLE internal heap floor");
+  radioSample.internal.freeBytes = 128 * 1024 - 1;
+  expect(std::strcmp(admitted(), "RADIO_MEMORY_MARGIN") == 0, "radio reports memory denial separately");
+  radioSample.temperatureValid = false;
+  expect(std::strcmp(admitted(), "RADIO_TEMP_UNAVAILABLE") == 0, "radio reports sensor denial separately");
   return failures == 0 ? 0 : 1;
 }

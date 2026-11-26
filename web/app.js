@@ -2,6 +2,8 @@
 
 const byId = id => document.getElementById(id);
 const views = ['pocketos', 'chipvitals', 'settings'];
+const offlinePreview = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) &&
+  new URLSearchParams(location.search).has('offline');
 const historyRows = [];
 let interval = 3;
 let timer;
@@ -72,15 +74,19 @@ async function api(route, options = {}) {
 
 function showView(moveFocus = false) {
   const page = location.hash.slice(1);
-  const active = views.includes(page) ? page : views[0];
+  const app = window.pocketApps?.catalog.find(item => item.id === page);
+  const active = views.includes(page) || app ? page : views[0];
   for (const id of views) byId(id).hidden = id !== active;
+  byId('application').hidden = !app;
+  if (app && activeView !== active) window.pocketApps.open(app);
+  if (!app && activeView !== active) window.pocketApps?.close();
   for (const link of document.querySelectorAll('nav a')) {
     if (link.hash === `#${active}`) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   }
-  if (moveFocus && activeView !== active) byId(active).querySelector('h1').focus();
+  if (moveFocus && activeView !== active) (app ? byId('application-name') : byId(active).querySelector('h1')).focus();
   activeView = active;
-  if (active === 'settings') loadSettings().catch(() => feedback('Device settings are temporarily unavailable.'));
+  if (active === 'settings' && !offlinePreview) loadSettings().catch(() => feedback('Device settings are temporarily unavailable.'));
 }
 
 function applyTheme(theme) {
@@ -129,11 +135,11 @@ function renderTelemetry(data) {
 }
 
 let catalogLoaded = false;
-async function loadCatalog() {
-  const apps = await api('/apps');
+function renderCatalog(apps) {
   const list = apps.map(app => {
     const row = document.createElement('li');
-    const available = app.state === 'available' && views.includes(app.id);
+    const available = app.state === 'available' &&
+      (views.includes(app.id) || window.pocketApps?.catalog.some(item => item.id === app.id));
     const name = cell(available ? 'a' : 'strong', app.name);
     if (available) name.href = `#${app.id}`;
     row.append(name, cell('span', app.detail || '', 'detail'),
@@ -141,6 +147,9 @@ async function loadCatalog() {
     return row;
   });
   byId('apps').replaceChildren(...list);
+}
+async function loadCatalog() {
+  renderCatalog(await api('/apps'));
   const device = await api('/system');
   value('firmware', device.firmwareVersion);
   value('build', device.buildId);
@@ -151,7 +160,7 @@ async function loadCatalog() {
 
 async function poll() {
   clearTimeout(timer);
-  if (fetching || document.hidden) return;
+  if (offlinePreview || fetching || document.hidden) return;
   fetching = true;
   const connection = byId('connection');
   try {

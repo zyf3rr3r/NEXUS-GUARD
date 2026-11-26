@@ -1,4 +1,5 @@
 #include "management.h"
+#include "radio_policy.h"
 #include "web_assets.h"
 
 #include <cinttypes>
@@ -26,18 +27,18 @@ constexpr char kApps[] = R"json([
  {"id":"pocketos","name":"PocketOS","state":"available"},
  {"id":"chipvitals","name":"ChipVitals","state":"available"},
  {"id":"settings","name":"Settings","state":"available"},
- {"id":"airscope","name":"AirScope","state":"not implemented","detail":"Wi-Fi discovery"},
- {"id":"bluescope","name":"BlueScope","state":"not implemented","detail":"BLE discovery"},
- {"id":"cyberdeck","name":"CyberDeck","state":"not implemented","detail":"Defensive diagnostics"},
- {"id":"deaddrop","name":"DeadDrop","state":"not implemented","detail":"Local messaging"},
- {"id":"pocketvault","name":"PocketVault","state":"not implemented","detail":"Encrypted storage"},
- {"id":"toolbox","name":"Toolbox","state":"not implemented","detail":"Offline utilities"},
- {"id":"usb-studio","name":"USB Studio","state":"not implemented","detail":"Native USB tools"},
- {"id":"ghostlink","name":"GhostLink","state":"not implemented","detail":"USB macro controls"},
- {"id":"soundforge","name":"SoundForge","state":"not implemented","detail":"Music and MIDI"},
- {"id":"portalplay","name":"PortalPlay","state":"not implemented","detail":"Local games"},
- {"id":"ghostsense","name":"GhostSense","state":"not implemented","detail":"Experimental signal sensing"},
- {"id":"cyberarena","name":"CyberArena","state":"not implemented","detail":"Offline learning"}
+ {"id":"airscope","name":"AirScope","state":"available","detail":"Passive Wi-Fi discovery"},
+ {"id":"bluescope","name":"BlueScope","state":"available","detail":"Passive BLE discovery"},
+ {"id":"cyberdeck","name":"CyberDeck","state":"available","detail":"NEXUS-S3 diagnostics"},
+ {"id":"deaddrop","name":"DeadDrop","state":"available","detail":"Local session inbox"},
+ {"id":"pocketvault","name":"PocketVault","state":"available","detail":"Encrypted local notes"},
+ {"id":"toolbox","name":"Toolbox","state":"available","detail":"Offline text utilities"},
+ {"id":"usb-studio","name":"USB Studio","state":"available","detail":"Browser serial monitor"},
+ {"id":"ghostlink","name":"GhostLink","state":"available","detail":"Armed serial shortcuts"},
+ {"id":"soundforge","name":"SoundForge","state":"available","detail":"Browser tone sequencer"},
+ {"id":"portalplay","name":"PortalPlay","state":"available","detail":"Offline memory game"},
+ {"id":"ghostsense","name":"GhostSense","state":"available","detail":"Experimental CSI capture"},
+ {"id":"cyberarena","name":"CyberArena","state":"available","detail":"Offline defensive puzzles"}
 ])json";
 
 uint64_t nowMs() { return esp_timer_get_time() / 1000; }
@@ -95,6 +96,23 @@ bool readBody(httpd_req_t* req, char* body, size_t length) {
          httpd_req_recv(req, body, length) == static_cast<int>(length);
 }
 
+void jsonAscii(const char* input, char* output) {
+  while (*input) {
+    if (*input == '"' || *input == '\\') *output++ = '\\';
+    *output++ = *input++;
+  }
+  *output = '\0';
+}
+
+const char* radioName(RadioApps::Kind kind) {
+  switch (kind) {
+    case RadioApps::Kind::Wifi: return "wifi";
+    case RadioApps::Kind::Ble: return "ble";
+    case RadioApps::Kind::Csi: return "csi";
+  }
+  return "unknown";
+}
+
 bool accepted(esp_err_t result) {
   if (result != ESP_OK) std::printf("MANAGEMENT SDK_ERROR %s\n", esp_err_to_name(result));
   return result == ESP_OK;
@@ -115,6 +133,7 @@ bool ManagementNetwork::start() {
     if (!accepted(esp_netif_init()) || !accepted(esp_event_loop_create_default())) return false;
     infrastructureReady_ = true;
   }
+  if (!radioApps_.init()) std::puts("MANAGEMENT RADIO_APPS_UNAVAILABLE");
   wifi_init_config_t init = WIFI_INIT_CONFIG_DEFAULT();
   init.nvs_enable = 0;
   if (!accepted(esp_wifi_init(&init))) return false;
@@ -162,6 +181,7 @@ bool ManagementNetwork::stop() {
     if (!accepted(httpd_stop(http_))) return false;
     http_ = nullptr;
   }
+  const bool radioReleased = radioApps_.stop();
   if (wifiStarted_) {
     const auto deadline = nowMs() + 1500;
     apStopped_.store(false);
@@ -195,8 +215,8 @@ bool ManagementNetwork::stop() {
   sessionExpiresMs_ = 0;
   job_.clear();
   portEXIT_CRITICAL(&lock_);
-  std::puts("MANAGEMENT STOP CONFIRMED");
-  return true;
+  if (radioReleased) std::puts("MANAGEMENT STOP CONFIRMED");
+  return radioReleased;
 }
 
 void ManagementNetwork::observeApStop(void* context, esp_event_base_t, int32_t, void*) {
@@ -213,6 +233,17 @@ void ManagementNetwork::publish(const PublicState& state) {
   }
   snapshot_ = state;
   portEXIT_CRITICAL(&lock_);
+}
+
+void ManagementNetwork::tickApps(uint64_t now, const char* block) {
+  radioApps_.tick(now, block);
+}
+
+const char* ManagementNetwork::queueRadio(RadioApps::Kind kind, uint64_t now) {
+  portENTER_CRITICAL(&lock_);
+  const auto sample = snapshot_;
+  portEXIT_CRITICAL(&lock_);
+  return radioApps_.queue(kind, now, optionalRadioBlock(sample.service, sample.warning, sample.cutoff, sample.telemetry));
 }
 
 bool ManagementNetwork::takeStop(uint64_t now) {
@@ -265,7 +296,8 @@ esp_err_t ManagementNetwork::route(httpd_req_t* req) {
     error(req, "403 Forbidden", "HOST_REJECTED");
     return ESP_FAIL;
   }
-  if (req->content_len > 32 || httpd_req_get_hdr_value_len(req, "Transfer-Encoding") != 0) {
+  const auto bodyLimit = req->method == HTTP_POST && std::strcmp(req->uri, "/api/v1/inbox") == 0 ? 96u : 32u;
+  if (req->content_len > bodyLimit || httpd_req_get_hdr_value_len(req, "Transfer-Encoding") != 0) {
     error(req, "413 Payload Too Large", "REQUEST_TOO_LARGE");
     return ESP_FAIL;
   }
@@ -289,7 +321,10 @@ esp_err_t ManagementNetwork::get(httpd_req_t* req) {
     return send(req, "200 OK", "text/css; charset=utf-8", web::style, sizeof(web::style) - 1);
   if (std::strcmp(uri, "/app.js") == 0)
     return send(req, "200 OK", "text/javascript; charset=utf-8", web::app, sizeof(web::app) - 1);
+  if (std::strcmp(uri, "/apps.js") == 0)
+    return send(req, "200 OK", "text/javascript; charset=utf-8", web::apps, sizeof(web::apps) - 1);
   if (std::strcmp(uri, "/api/v1/apps") == 0) return json(req, kApps);
+  if (std::strcmp(uri, "/api/v1/radio") == 0 || std::strcmp(uri, "/api/v1/inbox") == 0) return appRead(req);
   if (std::strncmp(uri, "/api/v1/jobs/", 13) == 0) return jobs(req, false);
   if (std::strcmp(uri, "/api/v1/events") == 0) {
     Event events[8]{};
@@ -414,6 +449,9 @@ esp_err_t ManagementNetwork::mutate(httpd_req_t* req) {
     error(req, "401 Unauthorized", "AUTH_REQUIRED");
     return req->content_len ? ESP_FAIL : ESP_OK;
   }
+  if (req->method == HTTP_POST &&
+      (std::strncmp(uri, "/api/v1/radio/", 14) == 0 || std::strcmp(uri, "/api/v1/inbox") == 0))
+    return appWrite(req);
   if (req->method == HTTP_PATCH && std::strcmp(uri, "/api/v1/settings") == 0) {
     char value[2]{};
     if (!readBody(req, value, 1) || (value[0] != '2' && value[0] != '3' && value[0] != '5')) {
@@ -459,6 +497,90 @@ esp_err_t ManagementNetwork::mutate(httpd_req_t* req) {
   if (req->method == HTTP_POST && std::strcmp(uri, "/api/v1/services/management/start") == 0)
     return error(req, "409 Conflict", "USE_SERIAL_TO_START");
   return error(req, "404 Not Found", "UNKNOWN_ROUTE");
+}
+
+esp_err_t ManagementNetwork::appRead(httpd_req_t* req) {
+  if (!authenticated(req)) return error(req, "401 Unauthorized", "AUTH_REQUIRED");
+  char data[2048]{};
+  size_t offset = 0;
+  if (std::strcmp(req->uri, "/api/v1/radio") == 0) {
+    const auto scan = radioApps_.result();
+    offset = std::snprintf(data, sizeof(data),
+        R"({"kind":"%s","state":"%s","reason":"%s","frames":%u,"mean":%u,"minimum":%u,"maximum":%u,"rows":[)",
+        radioName(scan.kind), RadioApps::stateName(scan.state), scan.reason, scan.frames,
+        scan.frames ? scan.amplitude / scan.frames : 0, scan.minAmplitude, scan.maxAmplitude);
+    for (unsigned i = 0; i < scan.count; ++i) {
+      const auto& row = scan.rows[i];
+      char name[65]{};
+      jsonAscii(row.name, name);
+      const int written = std::snprintf(data + offset, sizeof(data) - offset,
+          R"(%s{"name":"%s","rssi":%d,"channel":%u,"security":%u})",
+          i == 0 ? "" : ",", name, row.rssi, row.channel, row.security);
+      if (written < 0 || static_cast<size_t>(written) >= sizeof(data) - offset - 2)
+        return error(req, "500 Internal Server Error", "ENCODING_FAILED");
+      offset += written;
+    }
+    data[offset++] = ']';
+    data[offset] = '}';
+  } else {
+    Message copy[8]{};
+    portENTER_CRITICAL(&lock_);
+    const auto total = messages_;
+    std::memcpy(copy, inbox_, sizeof(copy));
+    portEXIT_CRITICAL(&lock_);
+    data[offset++] = '[';
+    const auto count = total < 8 ? total : 8;
+    for (unsigned i = 0; i < count; ++i) {
+      const auto& item = copy[(total - count + i) % 8];
+      char escaped[193]{};
+      jsonAscii(item.text, escaped);
+      const int written = std::snprintf(data + offset, sizeof(data) - offset,
+          R"(%s{"id":%u,"text":"%s"})", i == 0 ? "" : ",", item.id, escaped);
+      if (written < 0 || static_cast<size_t>(written) >= sizeof(data) - offset - 1)
+        return error(req, "500 Internal Server Error", "ENCODING_FAILED");
+      offset += written;
+    }
+    data[offset] = ']';
+  }
+  return json(req, data);
+}
+
+esp_err_t ManagementNetwork::appWrite(httpd_req_t* req) {
+  if (std::strcmp(req->uri, "/api/v1/inbox") == 0) {
+    char message[97]{};
+    const auto length = req->content_len;
+    if (length == 0 || !readBody(req, message, length)) {
+      error(req, "400 Bad Request", "INVALID_MESSAGE");
+      return ESP_FAIL;
+    }
+    for (size_t i = 0; i < length; ++i) {
+      if (message[i] < 32 || message[i] > 126) return error(req, "400 Bad Request", "INVALID_MESSAGE");
+    }
+    portENTER_CRITICAL(&lock_);
+    auto& slot = inbox_[messages_ % 8];
+    slot.id = ++messages_;
+    std::memcpy(slot.text, message, sizeof(message));
+    portEXIT_CRITICAL(&lock_);
+    return json(req, R"({"saved":true})", "201 Created");
+  }
+  if (req->content_len != 0) {
+    error(req, "400 Bad Request", "UNEXPECTED_BODY");
+    return ESP_FAIL;
+  }
+  const auto* operation = req->uri + 14;
+  if (std::strcmp(operation, "cancel") == 0) {
+    radioApps_.requestCancel();
+    return json(req, R"({"queued":true})", "202 Accepted");
+  }
+  auto kind = RadioApps::Kind::Wifi;
+  if (std::strcmp(operation, "ble") == 0) kind = RadioApps::Kind::Ble;
+  else if (std::strcmp(operation, "csi") == 0) kind = RadioApps::Kind::Csi;
+  else if (std::strcmp(operation, "wifi") != 0) return error(req, "404 Not Found", "UNKNOWN_ROUTE");
+  if (const auto* reason = queueRadio(kind, nowMs())) {
+    std::printf("RADIO REQUEST DENIED %s %s\n", radioName(kind), reason);
+    return error(req, "409 Conflict", reason);
+  }
+  return json(req, R"({"queued":true})", "202 Accepted");
 }
 
 esp_err_t ManagementNetwork::jobs(httpd_req_t* req, bool cancel) {

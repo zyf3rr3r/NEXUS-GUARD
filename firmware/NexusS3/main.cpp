@@ -1,6 +1,8 @@
 #include "boot_policy.h"
 #include "hal.h"
 #include "management.h"
+#include "native_usb.h"
+#include "radio_policy.h"
 
 #include <cinttypes>
 #include <cstdio>
@@ -20,7 +22,7 @@
 
 namespace {
 
-constexpr char kVersion[] = "0.1.0-dev.3";
+constexpr char kVersion[] = "0.2.0-dev.3";
 nexus::ManagementNetwork network;
 nexus::ManagementService service(network);
 char buildId[65]{};
@@ -30,6 +32,7 @@ bool telemetryEnabled = false;
 uint64_t nextSample = 0;
 uint64_t nextSerial = 0;
 uint32_t sequence = 0;
+const char* optionalAppsBlock = "RADIO_MANAGEMENT_REQUIRED";
 
 void printMemory(const char* name, const nexus::MemorySample& memory) {
   std::printf(" %s_free=%" PRIu32 " %s_largest=%" PRIu32 " %s_min=%" PRIu32,
@@ -107,9 +110,10 @@ void setup() {
     return;
   }
   Serial0.begin(115200);
+  nexus::setupNativeUsb();
   publish(initial);
   telemetryEnabled = true;
-  std::puts("UART commands: A starts management, S stops management, K rotates the operator code.");
+  std::puts("UART commands: A starts management, S stops management, K rotates the code, W queues one AirScope scan.");
 }
 
 void loop() {
@@ -117,6 +121,7 @@ void loop() {
   if (!telemetryEnabled) return;
   const auto now = nowMs();
   const auto before = service.state();
+  nexus::pollNativeUsb(now, before == nexus::ServiceState::Stopped);
   const int command = Serial0.available() > 0 ? Serial0.read() : -1;
   const bool browserStop = command != 'A' && command != 'S' && network.takeStop(now);
   if (command == 'A') {
@@ -130,8 +135,16 @@ void loop() {
     nextSample = 0;
   } else if (command == 'K' && before == nexus::ServiceState::Running) {
     network.rotateOperatorCode();
+  } else if (command == 'W') {
+    const auto* reason = network.queueRadio(nexus::RadioApps::Kind::Wifi, now);
+    std::printf("RADIO WIFI UART %s\n", reason ? reason : "QUEUED");
+  } else if (command == '?') {
+    printTelemetry(nexus::sampleTelemetry());
   }
-  if (now < nextSample) return;
+  if (now < nextSample) {
+    network.tickApps(now, optionalAppsBlock);
+    return;
+  }
   auto sample = nexus::sampleTelemetry();
   service.tick(guardSample(sample));
   if (before == nexus::ServiceState::Running && service.state() != before) {
@@ -140,6 +153,8 @@ void loop() {
     sample = nexus::sampleTelemetry();
   }
   publish(sample);
+  optionalAppsBlock = nexus::optionalRadioBlock(service.state(), service.warning(), service.guard().cutoff(), sample);
+  network.tickApps(sample.uptimeMs, optionalAppsBlock);
   nextSample = sample.uptimeMs + 1000;
   if (now >= nextSerial) {
     printTelemetry(sample);

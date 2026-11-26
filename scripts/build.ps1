@@ -1,11 +1,13 @@
 param(
     [string]$ArduinoCli = "$env:LOCALAPPDATA/Programs/Arduino IDE/resources/app/lib/backend/resources/arduino-cli.exe",
-    [string]$ArduinoData = "$env:LOCALAPPDATA/Arduino15"
+    [string]$ArduinoData = "$env:LOCALAPPDATA/Arduino15",
+    [switch]$NativeUsb
 )
 
 $ErrorActionPreference = 'Stop'
 $firmware = Join-Path $PSScriptRoot '../firmware/NexusS3'
 $fqbn = 'esp32:esp32:esp32s3:UploadSpeed=115200,USBMode=hwcdc,CDCOnBoot=default,MSCOnBoot=default,DFUOnBoot=default,UploadMode=default,CPUFreq=160,FlashMode=qio,FlashSize=16M,PartitionScheme=app3M_fat9M_16MB,DebugLevel=none,PSRAM=opi,LoopCore=1,EventsCore=1,EraseFlash=none,JTAGAdapter=default,ZigbeeMode=default'
+if ($NativeUsb) { $fqbn = $fqbn.Replace('USBMode=hwcdc', 'USBMode=default') }
 $partitionHash = 'ACE02503447D0F470692E65FA76002F2D77A92DC81CD3813D8AA66718D716DA9'
 $oldData = $env:ARDUINO_DIRECTORIES_DATA
 
@@ -20,13 +22,14 @@ try {
         throw 'The installed ESP32 Arduino core must be 3.3.12.'
     }
     $stamp = [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss-fffffff')
-    $build = New-Item -ItemType Directory -Path (Join-Path $PSScriptRoot "../build/esp32s3-$stamp")
+    $profile = if ($NativeUsb) { 'esp32s3-native-usb' } else { 'esp32s3' }
+    $build = New-Item -ItemType Directory -Path (Join-Path $PSScriptRoot "../build/$profile-$stamp")
     $buildPath = $build.FullName
     Write-Host "Build directory $buildPath"
     $source = Join-Path $buildPath 'source/NexusS3'
     New-Item -ItemType Directory -Path $source | Out-Null
     Copy-Item -Path (Join-Path $firmware '*') -Destination $source
-    $assets = [ordered]@{ index = 'index.html'; style = 'style.css'; app = 'app.js' }
+    $assets = [ordered]@{ index = 'index.html'; style = 'style.css'; app = 'app.js'; apps = 'apps.js' }
     $header = @('#pragma once', 'namespace nexus::web {')
     foreach ($asset in $assets.GetEnumerator()) {
         $content = Get-Content -Raw -Encoding utf8 -LiteralPath (Join-Path $PSScriptRoot "../web/$($asset.Value)")

@@ -23,3 +23,19 @@ Login and settings bodies use `Content-Type: text/plain` without a newline. Mana
 The 15-second browser cancellation window starts when the SDK reports that the HTTP acceptance response was sent. The supervisor can still act sooner on a Guard limit or an immediate UART stop. A successful cancellation returns `state: "cancelled"` and emits `MANAGEMENT STOP CANCELLED` with the job ID. UART logs `MANAGEMENT STOP SOURCE BROWSER` when the supervisor claims a browser stop and `MANAGEMENT STOP CONFIRMED` after release.
 
 Management traffic uses local HTTP inside the WPA2 AP. The bearer token is held in browser memory and is cleared on logout or expiry. The device does not persist credentials or telemetry. Keep the UART provisioning text private. Server-side authorization protects the control routes. Transport confidentiality beyond the AP's link protection and persistent device configuration require separate product work.
+
+## App suite candidate
+
+Firmware `0.2.0-dev.3` includes the following operator-authorized endpoints in addition to the existing API:
+
+| Method and endpoint | Result |
+|---|---|
+| POST `/radio/wifi`, `/radio/ble`, `/radio/csi` | Queue one bounded radio job |
+| POST `/radio/cancel` | Request job cancellation |
+| GET `/radio` | Latest job kind, state, reason, bounded discovery rows or CSI aggregates |
+| POST `/inbox` | Append a printable ASCII note of at most 96 bytes |
+| GET `/inbox` | Return the most recent eight notes from the current boot |
+
+The radio capacity is shared across apps. Its queue and the inbox have fixed bounds. The inbox POST is the sole exception to the default 32-byte request body limit.
+
+Radio POST errors include `RADIO_THERMAL_MARGIN`, `RADIO_MEMORY_MARGIN`, `RADIO_BUSY`, `RADIO_COOLDOWN`, and driver availability. The synchronous admission check and supervisor check share the same thresholds. UART `W` requests the same guarded Wi-Fi scan as AirScope. The result stays available through the authenticated read endpoint for the current management session.

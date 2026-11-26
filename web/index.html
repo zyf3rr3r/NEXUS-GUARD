@@ -7,6 +7,7 @@
   <title>PocketOS | NEXUS-S3</title>
   <link rel="stylesheet" href="/style.css">
   <script defer src="/app.js"></script>
+  <script defer src="/apps.js"></script>
 </head>
 <body>
   <header class="topbar">
@@ -124,6 +125,10 @@
             <p class="caption">After a stop, check UART for release confirmation. Send A there to request a new session.</p>
           </section>
         </div>
+      </section>
+      <section id="application" hidden>
+        <div class="heading"><div><h1 tabindex="-1" id="application-name"></h1><p id="application-detail"></p></div><a href="#pocketos">All apps</a></div>
+        <div id="application-body"></div>
       </section>
     </main>
   </div>

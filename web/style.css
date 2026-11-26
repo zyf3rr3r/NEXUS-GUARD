@@ -64,6 +64,16 @@ input{width:100%;min-width:0}
 .form-row input{flex:1 1 10rem}
 #feedback:not(:empty){margin-top:.9rem;color:var(--accent)}
 .notice{border:1px solid var(--line);border-radius:.5rem;color:var(--warn);padding:.65rem .85rem;margin-bottom:1rem}
+.app-panel{max-width:52rem}
+.app-field{margin-top:.9rem}
+.app-field input,.app-field textarea,.app-field select{display:block;margin-top:.35rem;max-width:100%}
+textarea{width:100%;min-height:6rem;resize:vertical;background:var(--base);color:var(--text);border:1px solid var(--muted);border-radius:.45rem;padding:.6rem .8rem;font:inherit}
+.app-status:not(:empty){margin-top:.9rem;color:var(--accent)}
+.app-output:not(:empty){background:var(--base);padding:.8rem;border-radius:.45rem;white-space:pre-wrap;overflow-wrap:anywhere;font:500 .85rem/1.6 var(--mono)}
+.app-output:empty{display:none}
+.app-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.6rem;margin-block:.9rem}
+.game-grid{max-width:24rem}
+.game-grid button{aspect-ratio:1;font:650 1.2rem var(--mono)}
 @media(max-width:800px){
   .layout{display:block}
   nav{flex-direction:row;padding:.55rem 1rem;border-right:0;border-bottom:1px solid var(--line)}

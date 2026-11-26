@@ -2,6 +2,7 @@
 
 #include "guard.h"
 #include "hal.h"
+#include "radio_apps.h"
 #include "stop_job.h"
 
 #include <atomic>
@@ -30,6 +31,8 @@ class ManagementNetwork final : public ServiceDriver {
   void publish(const PublicState& state);
   bool takeStop(uint64_t nowMs);
   void rotateOperatorCode();
+  void tickApps(uint64_t nowMs, const char* block);
+  const char* queueRadio(RadioApps::Kind kind, uint64_t nowMs);
 
  private:
   bool startHttp();
@@ -41,6 +44,8 @@ class ManagementNetwork final : public ServiceDriver {
   esp_err_t login(httpd_req_t* request);
   esp_err_t jobs(httpd_req_t* request, bool cancel);
   bool authenticated(httpd_req_t* request);
+  esp_err_t appRead(httpd_req_t* request);
+  esp_err_t appWrite(httpd_req_t* request);
 
   portMUX_TYPE lock_ = portMUX_INITIALIZER_UNLOCKED;
   struct Event {
@@ -49,6 +54,13 @@ class ManagementNetwork final : public ServiceDriver {
     Reason reason;
   };
   PublicState snapshot_{};
+  RadioApps radioApps_;
+  struct Message {
+    unsigned id;
+    char text[97];
+  };
+  Message inbox_[8]{};
+  unsigned messages_ = 0;
   Event events_[8]{};
   unsigned eventCount_ = 0;
   unsigned nextEvent_ = 0;
