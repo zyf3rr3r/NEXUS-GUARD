@@ -2,6 +2,7 @@
 #include "../../firmware/NexusS3/stop_job.h"
 #include "../../firmware/NexusS3/media_arm.h"
 #include "../../firmware/NexusS3/radio_policy.h"
+#include "../../firmware/NexusS3/field_policy.h"
 
 #include <cstdio>
 #include <cstring>
@@ -145,5 +146,55 @@ int main() {
   expect(std::strcmp(admitted(), "RADIO_MEMORY_MARGIN") == 0, "radio reports memory denial separately");
   radioSample.temperatureValid = false;
   expect(std::strcmp(admitted(), "RADIO_TEMP_UNAVAILABLE") == 0, "radio reports sensor denial separately");
+
+  // Standalone Field Mode policy & BOOT button tests
+  expect(!validFieldWifiPassword("short123", 8) && validFieldWifiPassword("NexusField2026!", 15) &&
+         !validFieldWifiPassword("            ", 12), "field Wi-Fi password requires 12-63 non-blank printable ASCII");
+  expect(!validFieldOperatorPassphrase("short7!", 7) && validFieldOperatorPassphrase("MyFieldPass!", 12) &&
+         !validFieldOperatorPassphrase("bad\ttab!!", 9), "field operator passphrase requires 8-32 printable ASCII");
+  expect(validOneTimeHexCode("0123456789abcdef0123456789abcdef", 32) &&
+         !validOneTimeHexCode("0123456789ABCDEF0123456789abcdef", 32), "one-time hex code validation");
+  const uint8_t seqA[4] = {1, 2, 3, 4};
+  const uint8_t seqB[4] = {1, 2, 3, 4};
+  const uint8_t seqC[4] = {1, 2, 3, 5};
+  expect(constantTimeEqual(seqA, seqB, 4) && !constantTimeEqual(seqA, seqC, 4), "constant-time compare");
+
+  expect(parseFieldCommand(":field", 6).kind == FieldCommand::Kind::Status, "parse :field command");
+  expect(parseFieldCommand(":clear", 6).kind == FieldCommand::Kind::Clear, "parse :clear command");
+  const auto wifiCmd = parseFieldCommand(":wifi NexusField2026!", 21);
+  expect(wifiCmd.kind == FieldCommand::Kind::SetWifi && wifiCmd.argLen == 15, "parse :wifi command");
+  expect(parseFieldCommand(":wifi short", 11).kind == FieldCommand::Kind::Invalid, "reject short :wifi command");
+  const auto passCmd = parseFieldCommand(":pass MyFieldPass!", 18);
+  expect(passCmd.kind == FieldCommand::Kind::SetPass && passCmd.argLen == 12, "parse :pass command");
+  expect(parseFieldCommand(":pass bad", 9).kind == FieldCommand::Kind::Invalid, "reject short :pass command");
+
+  FieldButton button;
+  expect(button.poll(true, 100, false) == FieldButton::Action::None &&
+         button.poll(true, 3000, false) == FieldButton::Action::None,
+         "BOOT held during power-on never triggers start");
+  expect(button.poll(false, 3100, false) == FieldButton::Action::None, "BOOT arms after release");
+  expect(button.poll(true, 3200, false) == FieldButton::Action::None &&
+         button.poll(true, 3250, false) == FieldButton::Action::None &&
+         button.holdingToStart(false) &&
+         button.poll(false, 3500, false) == FieldButton::Action::None &&
+         button.poll(false, 3550, false) == FieldButton::Action::None,
+         "short press in idle is ignored to prevent pocket bumps");
+  expect(button.poll(true, 4000, false) == FieldButton::Action::None &&
+         button.poll(true, 4050, false) == FieldButton::Action::None &&
+         button.poll(true, 5549, false) == FieldButton::Action::None &&
+         button.poll(true, 5550, false) == FieldButton::Action::Start &&
+         button.poll(true, 6000, false) == FieldButton::Action::None &&
+         button.poll(false, 6100, true) == FieldButton::Action::None &&
+         button.poll(false, 6150, true) == FieldButton::Action::None,
+         "1.5 s BOOT hold starts management once and release does not immediately stop");
+  expect(button.poll(true, 7000, true) == FieldButton::Action::None &&
+         button.poll(true, 7050, true) == FieldButton::Action::None &&
+         button.poll(false, 7200, true) == FieldButton::Action::None &&
+         button.poll(false, 7250, true) == FieldButton::Action::Stop,
+         "short BOOT press while running stops management");
+  expect(button.poll(true, 8000, true) == FieldButton::Action::None &&
+         button.poll(true, 8050, true) == FieldButton::Action::None &&
+         button.poll(true, 9550, true) == FieldButton::Action::Stop,
+         "long BOOT hold while running also stops management");
   return failures == 0 ? 0 : 1;
 }

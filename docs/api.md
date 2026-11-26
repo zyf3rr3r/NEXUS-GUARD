@@ -9,9 +9,9 @@ Firmware `0.1.0-dev.3` serves the application at `/` and the local API under `/a
 | GET `/guard` | Policy version, lease cutoff, memory reserves and last Guard status |
 | GET `/apps` | App registry and availability |
 | GET `/services` | Management service state, dependencies and admission headroom |
-| GET `/settings` | Redacted AP policy and browser polling preference |
+| GET `/settings` | Redacted AP policy, browser polling preference, and Standalone Field Mode status (`fieldMode`, `fieldWifi`, `fieldPass`, `nvsReady`) |
 | GET `/events` | Most recent redacted service and Guard events |
-| POST `/auth/session` | Exchange the 32-character UART code once for a five-minute bearer token |
+| POST `/auth/session` | Exchange the 32-character one-time UART code OR the 8–32 character Standalone Field passphrase for a five-minute bearer token |
 | DELETE `/auth/session` | End the operator session |
 | PATCH `/settings` | Apply a refresh interval of 2, 3 or 5 seconds for the current boot |
 | POST `/services/management/stop` | Queue a stop and return HTTP 202 with a job ID and `remainingMs` |

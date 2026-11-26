@@ -150,7 +150,11 @@ bool ManagementNetwork::start() {
   wifi_config_t config{};
   std::memcpy(config.ap.ssid, kSsid, sizeof(kSsid) - 1);
   config.ap.ssid_len = sizeof(kSsid) - 1;
-  std::memcpy(config.ap.password, password_, sizeof(password_));
+  char activePassword[64]{};
+  const bool fieldWifi = fieldStore_ != nullptr && fieldStore_->copyWifiPassword(activePassword);
+  if (!fieldWifi) std::memcpy(activePassword, password_, sizeof(password_));
+  std::memcpy(config.ap.password, activePassword, sizeof(activePassword));
+  mbedtls_platform_zeroize(activePassword, sizeof(activePassword));
   config.ap.channel = 1;
   config.ap.authmode = WIFI_AUTH_WPA2_PSK;
   config.ap.max_connection = 1;
@@ -171,7 +175,11 @@ bool ManagementNetwork::start() {
   std::snprintf(host_, sizeof(host_), IPSTR, IP2STR(&address.ip));
   std::snprintf(origin_, sizeof(origin_), "http://%s", host_);
   if (!startHttp()) return false;
-  std::printf("MANAGEMENT URL %s  SSID %s  WPA2 password %s\n", origin_, kSsid, password_);
+  if (fieldWifi) {
+    std::printf("MANAGEMENT URL %s  SSID %s  WPA2 password <field-configured>\n", origin_, kSsid);
+  } else {
+    std::printf("MANAGEMENT URL %s  SSID %s  WPA2 password %s\n", origin_, kSsid, password_);
+  }
   rotateOperatorCode();
   return true;
 }
@@ -358,9 +366,14 @@ esp_err_t ManagementNetwork::get(httpd_req_t* req) {
                   R"({"chip":"ESP32-S3","firmwareVersion":"%s","buildId":"%s","cores":%u,"resetReason":%d})",
                   nexusVersion(), nexusBuildId(), nexusCoreCount(), nexusResetReason());
   } else if (std::strcmp(uri, "/api/v1/settings") == 0) {
+    const bool nvsReady = fieldStore_ != nullptr && fieldStore_->nvsReady();
+    const bool fieldWifi = fieldStore_ != nullptr && fieldStore_->hasWifi();
+    const bool fieldPass = fieldStore_ != nullptr && fieldStore_->hasPass();
+    const bool fieldMode = fieldWifi && fieldPass;
     std::snprintf(response, sizeof(response),
-                  R"({"ssid":"NEXUS-S3","channel":1,"clientLimit":1,"txPowerDbm":8.5,"pollSeconds":%u,"persistence":"current boot"})",
-                  interval);
+                  R"({"ssid":"NEXUS-S3","channel":1,"clientLimit":1,"txPowerDbm":8.5,"pollSeconds":%u,"persistence":"current boot","fieldMode":%s,"fieldWifi":%s,"fieldPass":%s,"nvsReady":%s})",
+                  interval, fieldMode ? "true" : "false", fieldWifi ? "true" : "false",
+                  fieldPass ? "true" : "false", nvsReady ? "true" : "false");
   } else if (std::strcmp(uri, "/api/v1/services") == 0) {
     std::snprintf(response, sizeof(response),
                   R"([{"id":"management","state":"%s","dependencies":[],"reason":"%s","internalHeadroomBytes":%u}])",
@@ -414,21 +427,30 @@ esp_err_t ManagementNetwork::login(httpd_req_t* req) {
     return ESP_FAIL;
   }
   char input[33]{};
-  if (!readBody(req, input, 32)) {
+  const size_t length = req->content_len;
+  if (length < kMinFieldPassLen || length > kMaxFieldPassLen || !readBody(req, input, length)) {
     error(req, "400 Bad Request", "INVALID_OPERATOR_CODE");
     return ESP_FAIL;
   }
   char token[33]{};
   randomHex(token);
+  bool matchedOneTime = false;
   portENTER_CRITICAL(&lock_);
   nextLoginMs_ = now + 2000;
-  const bool valid = operatorCode_[0] != '\0' && matchesSecret(input, operatorCode_);
-  if (valid) {
+  if (length == 32 && operatorCode_[0] != '\0' && matchesSecret(input, operatorCode_)) {
+    matchedOneTime = true;
     mbedtls_platform_zeroize(operatorCode_, sizeof(operatorCode_));
-    std::memcpy(session_, token, sizeof(token));
-    sessionExpiresMs_ = now + 300000;
   }
   portEXIT_CRITICAL(&lock_);
+  const bool matchedField =
+      !matchedOneTime && fieldStore_ != nullptr && fieldStore_->verifyOperatorPassphrase(input, length);
+  const bool valid = matchedOneTime || matchedField;
+  if (valid) {
+    portENTER_CRITICAL(&lock_);
+    std::memcpy(session_, token, sizeof(token));
+    sessionExpiresMs_ = now + 300000;
+    portEXIT_CRITICAL(&lock_);
+  }
   mbedtls_platform_zeroize(input, sizeof(input));
   if (!valid) {
     mbedtls_platform_zeroize(token, sizeof(token));

@@ -25,6 +25,7 @@ let radioKind = 'wifi';
 let denyRadio = false;
 const inbox = [];
 const fixtureCode = '1'.repeat(32);
+const fixtureFieldPass = 'FieldPass2026!';
 const fixtureToken = '2'.repeat(32);
 const server = createServer(async (req, res) => {
   const asset = assets.get(new URL(req.url, 'http://127.0.0.1').pathname);
@@ -46,7 +47,7 @@ const server = createServer(async (req, res) => {
   if (req.method !== 'GET' && req.headers.origin !== `http://127.0.0.1:${server.address().port}`)
     return error(403, 'ORIGIN_REJECTED');
   if (route === '/auth/session' && req.method === 'POST') {
-    if (text !== fixtureCode || !locked) return error(401, 'INVALID_OPERATOR_CODE');
+    if ((text !== fixtureCode && text !== fixtureFieldPass) || !locked) return error(401, 'INVALID_OPERATOR_CODE');
     locked = false;
     return json({token:fixtureToken, expiresInSeconds:300});
   }
@@ -86,7 +87,7 @@ const server = createServer(async (req, res) => {
     pollSeconds = Number(text);
     return json({applied:true});
   }
-  if (route === '/settings') return json({ssid:'NEXUS-S3', channel:1, clientLimit:1, txPowerDbm:8.5, pollSeconds});
+  if (route === '/settings') return json({ssid:'NEXUS-S3', channel:1, clientLimit:1, txPowerDbm:8.5, pollSeconds, fieldMode:true, fieldWifi:true, fieldPass:true, nvsReady:true});
   if (route === '/events') return json([{uptimeMs:20000,state:'running',reason:'NONE'}]);
   if (route === '/services/management/stop' && req.method === 'POST') {
     jobState = 'queued';
@@ -332,6 +333,11 @@ try {
   await pageReady("document.getElementById('controls').hidden", 'controls locked');
   assert.equal(await evaluate('document.activeElement.id'), 'operator-code');
   assert.ok(locked);
+  assert.ok(await evaluate("document.querySelector('[data-value=fieldMode]').textContent.includes('Standalone Field Mode')"));
+  await evaluate(`document.getElementById('operator-code').value = '${fixtureFieldPass}'; document.getElementById('login').requestSubmit(document.querySelector('#login button'))`);
+  await pageReady("!document.getElementById('controls').hidden", 'Field Mode passphrase sign-in');
+  await evaluate("document.getElementById('logout').click()");
+  await pageReady("document.getElementById('controls').hidden", 'controls re-locked after Field sign-in');
   const theme = await evaluate("document.getElementById('theme').click(); localStorage.getItem('nexus-theme')");
   assert.match(theme, /^(light|dark)$/);
   await send('Page.reload');

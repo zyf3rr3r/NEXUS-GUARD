@@ -1,5 +1,6 @@
 #pragma once
 
+#include "field_store.h"
 #include "guard.h"
 #include "hal.h"
 #include "radio_apps.h"
@@ -25,6 +26,7 @@ struct PublicState {
 
 class ManagementNetwork final : public ServiceDriver {
  public:
+  void attachFieldStore(const FieldStore* store) { fieldStore_ = store; }
   void preparePassword();
   bool start() override;
   bool stop() override;
@@ -53,6 +55,7 @@ class ManagementNetwork final : public ServiceDriver {
     ServiceState state;
     Reason reason;
   };
+  const FieldStore* fieldStore_ = nullptr;
   PublicState snapshot_{};
   RadioApps radioApps_;
   struct Message {

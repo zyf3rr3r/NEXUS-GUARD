@@ -99,10 +99,11 @@
               <div><dt>Network</dt><dd data-value="network">…</dd></div>
               <div><dt>Client limit</dt><dd data-value="limit">…</dd></div>
               <div><dt>Transmit power</dt><dd data-value="power">…</dd></div>
+              <div><dt>Access mode</dt><dd data-value="fieldMode">…</dd></div>
             </dl>
             <form id="login">
-              <label for="operator-code">One-time operator code</label>
-              <p class="caption" id="code-help">Read the code from the UART console. Send K there to issue a new one during a session.</p>
+              <label for="operator-code">Operator code or Field passphrase</label>
+              <p class="caption" id="code-help">Enter the 32-character UART code, or your Standalone Field Mode passphrase if configured.</p>
               <div class="form-row"><input id="operator-code" aria-describedby="code-help" type="password" maxlength="32" autocomplete="off" required><button type="submit">Unlock controls</button></div>
             </form>
             <div id="controls" hidden>
@@ -122,7 +123,7 @@
             <h2>Guard and service events</h2>
             <ol id="events" class="list"><li>Waiting for device events.</li></ol>
             <a class="text-action" href="/api/v1/events" download="nexus-events.json">Export events</a>
-            <p class="caption">After a stop, check UART for release confirmation. Send A there to request a new session.</p>
+            <p class="caption">After a stop, hold BOOT (1.5 s) or send A on UART to start a new session. Press BOOT anytime to stop.</p>
           </section>
         </div>
       </section>

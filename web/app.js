@@ -25,9 +25,9 @@ const reasons = {
   SESSION_EXPIRED: 'Management window expired', DRIVER_START_FAILED: 'Startup failed',
   DRIVER_STOP_UNCONFIRMED: 'Release unconfirmed. Check UART.',
   STOP_REQUESTED: 'Stop requested', HEAP_INTEGRITY: 'Heap integrity fault',
-  INVALID_OPERATOR_CODE: 'Code invalid or already used. Rotate it with K on UART.',
+  INVALID_OPERATOR_CODE: 'Invalid code or Field passphrase. Check UART (K rotates code) or your Field passphrase.',
   TRY_LATER: 'Wait two seconds before retrying.',
-  AUTH_REQUIRED: 'Controls are locked. Request a fresh code on UART.',
+  AUTH_REQUIRED: 'Controls are locked. Unlock in Settings with a UART code or Field passphrase.',
   STOP_ALREADY_RUNNING: 'Stop has already begun. Check UART for confirmation.',
   INVALID_POLL_INTERVAL: 'Choose a supported refresh interval.'
 };
@@ -187,6 +187,11 @@ async function loadSettings() {
   value('network', `${settings.ssid} · ch ${settings.channel}`);
   value('limit', String(settings.clientLimit));
   value('power', `${settings.txPowerDbm} dBm`);
+  value('fieldMode', settings.fieldMode ? 'Standalone Field Mode (BOOT button)' :
+    (settings.fieldWifi || settings.fieldPass) ? 'Partial Field setup (check :field on UART)' : 'Ephemeral UART only');
+  byId('code-help').textContent = settings.fieldPass ?
+    'Enter your Standalone Field passphrase (8–32 characters), or the 32-character one-time UART code.' :
+    'Read the 32-character code from the UART console. Send K there to rotate it, or configure Field Mode with :wifi and :pass.';
   const events = await api('/events');
   const rows = events.map(event => cell('li', `${uptime(event.uptimeMs)} · ${event.state} · ${label(event.reason)}`));
   byId('events').replaceChildren(...(rows.length ? rows : [cell('li', 'No recorded state changes.')]));
@@ -216,7 +221,7 @@ byId('login').addEventListener('submit', event => {
   const input = byId('operator-code');
   const code = input.value.trim();
   input.value = '';
-  if (!/^[0-9a-f]{32}$/.test(code)) { feedback('Enter the 32-character operator code from UART.'); return; }
+  if (!/^[\x20-\x7e]{8,32}$/.test(code)) { feedback('Enter an 8–32 character Field passphrase or the 32-character UART code.'); return; }
   perform(event.submitter, async () => {
     const session = await api('/auth/session', {method:'POST', body:code});
     setSession(session.token, session.expiresInSeconds, true);

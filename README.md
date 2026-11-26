@@ -3,10 +3,10 @@
 > Local-first, thermally and memory-guarded firmware and embedded web console (**PocketOS**) for the **ESP32-S3 N16R8**.
 
 ![Target](https://img.shields.io/badge/Target-ESP32--S3%20N16R8-10b981?style=flat-square)
-![Firmware](https://img.shields.io/badge/Firmware-0.2.0--dev.3-0ea5e9?style=flat-square)
+![Firmware](https://img.shields.io/badge/Firmware-0.3.0--dev.1-0ea5e9?style=flat-square)
 ![SDK](https://img.shields.io/badge/ESP--IDF-5.5.5%20%2F%20Arduino%203.3.12-6366f1?style=flat-square)
 ![UI](https://img.shields.io/badge/PocketOS-Zero--Dependency%20Web%20UI-22c55e?style=flat-square)
-![Tests](https://img.shields.io/badge/Host%20Tests-10%20Boot%20%7C%2035%20Guard%20%7C%20Edge%20UI-16a34a?style=flat-square)
+![Tests](https://img.shields.io/badge/Host%20Tests-10%20Boot%20%7C%2051%20Guard%20%7C%20Edge%20UI-16a34a?style=flat-square)
 
 **NEXUS-S3** is a defensive, local-first embedded toolkit built around **NEXUS Guard** — a deterministic hardware safety supervisor that gates Wi-Fi, HTTP, BLE, and CSI radio workloads behind strict on-chip temperature, internal heap, PSRAM, and session-lifecycle budgets. There is no cloud dependency, no persistent credential storage, and no background radio activity on boot.
 
@@ -34,7 +34,9 @@ flowchart LR
   - Cold management AP admission at `≤ 33.3°C` with a fixed session cutoff at `+10°C` above the admitted reading.
   - Optional radio scans require `> 3°C` thermal margin below cutoff, `≥ 128 KiB` internal free heap, `≥ 48 KiB` largest contiguous block, and `≥ 1 MiB` PSRAM free.
   - 10-minute session lifetime, 15-second cancellable browser stop window, and 30-second post-shutdown cooldown.
-- **Ephemeral local authority**: Fresh 32-hex WPA2 passphrase generated per boot (before RF/ADC start) and fresh one-time 32-hex operator code per session — provisioned only over physical UART and never written to flash.
+- **Ephemeral UART or Standalone Field Mode (no laptop required)**:
+  - Out of the box, generates a fresh 32-hex WPA2 passphrase per boot and one-time 32-hex operator code per session over UART.
+  - Provision **Standalone Field Mode** once (`./scripts/provision-field.ps1` or UART `:wifi` / `:pass`) to store your own WPA2 password and salted PBKDF2-HMAC-SHA256 operator verifier in non-erasing NVS. Away from your laptop (e.g. on a power bank with just your phone), **hold `BOOT` (`GPIO 0`) for 1.5 s** to start the AP, watch the onboard **RGB LED (`GPIO 48`)** for live status (blue = holding, green = running, amber = thermal warning, red blink = Guard denied/fault), and **press `BOOT`** anytime to stop cleanly.
 
 ---
 
@@ -96,15 +98,16 @@ node scripts/serve-local.mjs
 # Open http://127.0.0.1:8077/?offline=1
 ```
 
-### 4. UART Operator Commands (115200 baud)
+### 4. UART, Field Provisioning & Physical `BOOT` Button Controls
 
-| Key | Action |
+| Input | Action |
 |---|---|
-| `A` | Request Guard admission and start the `NEXUS-S3` WPA2 management AP + HTTP server |
-| `S` | Immediately stop management, release Wi-Fi/HTTP, and log `MANAGEMENT STOP CONFIRMED` |
-| `K` | Rotate the one-time 32-char operator code and immediately revoke any active bearer session |
-| `W` | Queue one guarded AirScope passive Wi-Fi scan early in a cool management session |
-| `?` | Print an immediate `STATUS` telemetry snapshot (uptime, clock, temperature, internal & PSRAM heap) |
+| `A` *(UART)* / **Hold `BOOT` 1.5 s** | Request Guard admission and start the `NEXUS-S3` WPA2 management AP + HTTP server |
+| `S` *(UART)* / **Press `BOOT`** | Immediately stop management, release Wi-Fi/HTTP, and log `MANAGEMENT STOP CONFIRMED` |
+| `K` *(UART)* | Rotate the one-time 32-char operator code and immediately revoke any active bearer session |
+| `W` *(UART)* | Queue one guarded AirScope passive Wi-Fi scan early in a cool management session |
+| `?` *(UART)* | Print an immediate `STATUS` telemetry snapshot (uptime, clock, temperature, internal & PSRAM heap) |
+| `:field` / `:wifi <12..63>` / `:pass <8..32>` / `:clear` | Inspect, provision, or wipe Standalone Field Mode credentials in NVS (or run `./scripts/provision-field.ps1`) |
 
 ---
 

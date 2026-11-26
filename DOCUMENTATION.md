@@ -1,6 +1,6 @@
 # NEXUS-GUARD (`NEXUS-S3`) — Complete Technical Documentation
 
-> **Firmware Version:** `0.2.0-dev.3`  
+> **Firmware Version:** `0.3.0-dev.1` (Standalone Field Mode + Full 12-App Suite)  
 > **Target Hardware:** ESP32-S3 N16R8 (QFN56 rev v0.2, 16 MiB Flash, 8 MiB OPI PSRAM, 160 MHz qualified profile)  
 > **Toolchain Baseline:** Arduino CLI `1.6.0` · ESP32 Arduino Core `3.3.12` · ESP-IDF `5.5.5` · esptool `5.3.1` · Xtensa GCC `2601`
 
@@ -78,9 +78,13 @@ flowchart TB
 | `firmware/NexusS3/radio_policy.h` | Shared thermal and memory admission gates for optional radio jobs |
 | `firmware/NexusS3/radio_apps.h`, `radio_apps.cpp` | Single-slot bounded Wi-Fi passive scan, NimBLE passive discovery, and Wi-Fi CSI capture |
 | `firmware/NexusS3/management.h`, `management.cpp` | WPA2 AP ownership, `esp_http_server` routing, constant-time auth, volatile inbox, event ring |
+| `firmware/NexusS3/field_policy.h` | Pure C++17 Standalone Field credential rules, `:` command parser, and `FieldButton` state machine |
+| `firmware/NexusS3/field_store.h`, `field_store.cpp` | Safe non-erasing NVS owner storing Field WPA2 passphrase & salted PBKDF2-HMAC-SHA256 verifier |
+| `firmware/NexusS3/status_led.h`, `status_led.cpp` | Onboard RGB LED (`GPIO 48`) status indicator for eyes-free standalone operation |
 | `firmware/NexusS3/media_arm.h`, `native_usb.h`, `native_usb.cpp` | Separate TinyUSB CDC + single-action armed HID consumer control (`-NativeUsb` profile) |
 | `web/index.html`, `style.css`, `app.js`, `apps.js` | Embedded PocketOS dashboard, ChipVitals, Settings, and all 12 apps |
 | `scripts/build.ps1` | Reproducible build pipeline, asset packager, partition-hash verifier, ELF symbol verifier |
+| `scripts/provision-field.ps1` | Interactive masked PowerShell helper for provisioning or clearing Standalone Field Mode |
 | `scripts/serve-local.mjs` | Zero-dependency loopback HTTP server for secure-context browser APIs (`127.0.0.1:8077`) |
 
 ---
@@ -179,8 +183,20 @@ stateDiagram-v2
   - Serves PocketOS with strict `Content-Security-Policy` (`default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`).
   - Maximum 4 open sockets with 2-second recv/send timeouts and LRU purge enabled.
 
+### Standalone Field Mode (Power Bank + Phone, No Laptop)
+When provisioned once over UART (`./scripts/provision-field.ps1` or `:wifi` + `:pass`), `FieldStore` initializes NVS **without ever calling `nvs_flash_erase()`** and stores credentials exclusively in namespace `"nexus_field"`:
+- **Field Wi-Fi WPA2 Password (`12–63` printable ASCII)**: Used for `NEXUS-S3` AP startup and redacted from UART logs (`WPA2 password <field-configured>`).
+- **Field Operator Passphrase (`8–32` printable ASCII)**: Stored as a **48-byte verifier** (`16 B` random salt + `32 B` PBKDF2-HMAC-SHA256 at `10,000` rounds), never in plaintext. Accepted alongside the one-time 32-hex UART code at `POST /api/v1/auth/session` with constant-time comparison and 2-second rate limiting.
+- **Physical `BOOT` Button (`GPIO 0`)**:
+  - Locked out while held during power-on/reset; ignores short bumps (< 1.5 s) in idle.
+  - **Hold 1.5 s in idle** → triggers Guard-supervised AP start (`MANAGEMENT START SOURCE BUTTON`).
+  - **Short press (or hold) while running** → triggers immediate clean shutdown (`MANAGEMENT STOP SOURCE BUTTON`).
+- **Onboard RGB LED (`GPIO 48`)**:
+  - **Off** = `IDLE` · **Blue** = holding `BOOT` to start · **Green** = AP `RUNNING` · **Amber** = `THERMAL_WARNING` · **Red blink** = Guard denied start or fault · **Cyan flash** = Field credentials saved or cleared.
+- Send `:clear` over UART (or `./scripts/provision-field.ps1 -Clear`) anytime to erase `"nexus_field"` and revert immediately to 100% ephemeral random-per-boot mode.
+
 > [!WARNING]
-> Keep UART transcripts private. They contain the active boot's WPA2 passphrase and one-time operator code. Always reboot before starting a new session if provisioning output was exposed.
+> Keep UART transcripts private. In ephemeral mode they contain the active boot's WPA2 passphrase and one-time operator code. Always reboot before starting a new session if provisioning output was exposed.
 
 ---
 
@@ -333,7 +349,8 @@ Full dated entries are maintained in [docs/qualification-register.md](docs/quali
 
 | Area | Result | Verified Highlights (`0.2.0-dev.3`) |
 |---|---|---|
-| **Host Policy Suite** | **PASS** | `10/10` boot-policy tests + `35/35` Guard, StopJob, MediaArm, and radio-policy tests (`/W4 /WX`) |
+| **Host Policy Suite** | **PASS** | `10/10` boot-policy tests + `51/51` Guard, StopJob, MediaArm, radio-policy, Field credentials, and `BOOT` button tests (`/W4 /WX`) |
+| **Standalone Field Mode (`0.3.0-dev.1`)** | **PASS** | Non-erasing NVS (`nvs=ok`), `:wifi` + PBKDF2 `:pass` persistence across hardware reset, redacted UART AP line, Field Wi-Fi join, PBKDF2 Field passphrase unlock (`wrong=401`), clean `:clear` wipe, and `272,088 B` idle internal heap |
 | **Browser Fixture Suite** | **PASS** | Desktop & 360 px mobile render, auth, stop/cancel, theme persistence, and all 12 app views |
 | **Foundation Hardware Smoke** | **PASS** | Healthy `160 MHz` boot (`faults=0x00`), UART/HTTP telemetry parity, `401` auth enforcement, Settings mutation, browser stop cancellation & shutdown |
 | **AirScope Hardware** | **PASS** | Cold UART `W` scan, authenticated HTTP POST scan, cached result retrieval, and `RADIO_USER_CANCELLED` |
