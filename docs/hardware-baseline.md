@@ -2,6 +2,8 @@
 
 Reconciled on 2026-11-26 against both NEXUS-S3 handoffs, the original v2.3 serial transcript, the installed board package, and historical files inspected in place.
 
+<a href="images/nexus-s3-board.jpg"><img src="images/nexus-s3-board.jpg" width="320" alt="NEXUS-S3 board showing the ESP32-S3-WROOM-1 module, two USB-C ports, and BOOT and RST buttons"></a>
+
 | Item | Baseline |
 |---|---|
 | Target | ESP32-S3 N16R8, silicon revision v0.2 as reported, CH343 UART bridge |

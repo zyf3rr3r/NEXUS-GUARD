@@ -12,6 +12,12 @@
 
 📖 **Read the complete technical manual in [DOCUMENTATION.md](DOCUMENTATION.md).**
 
+## NEXUS-S3 Hardware
+
+<a href="docs/images/nexus-s3-board.jpg"><img src="docs/images/nexus-s3-board.jpg" width="320" alt="ESP32-S3 development board on a white stand with a USB-C cable connected, a red LED lit, and BOOT and RST buttons visible"></a>
+
+The board uses an ESP32-S3-WROOM-1 module and has two USB-C ports. [See the hardware baseline and qualification results](docs/hardware-baseline.md).
+
 ## PocketOS on Mobile
 
 PocketOS runs in a phone browser connected directly to the NEXUS-S3 management network. These captures show firmware `0.3.0-dev.1` in the green dark theme.
