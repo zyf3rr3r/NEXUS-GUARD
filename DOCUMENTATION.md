@@ -342,7 +342,7 @@ Full dated entries are maintained in [docs/qualification-register.md](docs/quali
 | **DeadDrop Hardware** | **PASS** | `401` unauth, `400` non-printable, oversize rejection, 9→8 ring wrap, UART `K` token revocation, and same-boot cross-AP-session retention |
 | **GhostSense Hardware** | **PASS** | Repeated 3 s CSI captures (`140`, `122`, and `133` eligible frames), clean shutdown, **0 B internal heap drift** (`279,928 B`) across two back-to-back sessions |
 | **Localhost App Suite** | **PASS** | PocketVault AES-GCM/PBKDF2 round-trip + tamper rejection, Toolbox NIST SHA-256, SoundForge valid 69 B SMF MIDI export, PortalPlay full 16-tile completion & reset, CyberArena 3-exercise flow |
-| **Native USB (`GhostLink`)** | **BUILT** | `0.2.0-dev.3` Native USB image (`1,213,920 B`, ELF `2e47c03e3`) built & `esptool`-validated; awaiting dedicated Native USB (`COM6`) hardware session |
+| **Native USB (`GhostLink`)** | **PASS** | `0.2.0-dev.3` Native USB (`1,213,920 B`, ELF `2e47c03e3`) enumerated `USB Serial Device` + `VID_303A` HID Consumer Control; verified `?` help, pre-arm denial, single `U` → `P` action & auto-disarm, `X` disarm, and 15 s arm expiry |
 
 ---
 

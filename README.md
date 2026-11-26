@@ -49,8 +49,8 @@ flowchart LR
 | **GhostSense** | ESP32-S3 | 3-second owned-link Wi-Fi CSI aggregate amplitude experiment (up to 192 frames) | Verified on hardware (zero heap drift) |
 | **PocketVault** | Localhost | Browser-local AES-256-GCM + PBKDF2 (600k rounds) encrypted note envelopes | Verified in Microsoft Edge |
 | **Toolbox** | Board + Localhost | UTF-8 Base64, Hex, URL transforms + Web Crypto SHA-256 on localhost | Verified in Microsoft Edge |
-| **USB Studio** | Localhost + UART | Web Serial 115200-baud monitor and `?` status telemetry trigger | UART `?` & UI guard verified |
-| **GhostLink** | Native USB Profile | Explicitly armed, single-action TinyUSB media HID controls (`U` → `P`/`N`/`B`, `X`) | Built & validated (`-NativeUsb`), host-tested |
+| **USB Studio** | Localhost + UART / CDC | Web Serial 115200-baud monitor and `?` status trigger on COM/UART and Native USB | UART `?`, Native CDC `?` & UI guard verified |
+| **GhostLink** | Native USB Profile | Explicitly armed, single-action TinyUSB media HID controls (`U` → `P`/`N`/`B`, `X`) | Verified on hardware (CDC + HID, arm/disarm/expiry) |
 | **SoundForge** | Localhost | 8-step Web Audio tone sequencer with Standard MIDI (`.mid`) export | Verified in Microsoft Edge (SMF binary checked) |
 | **PortalPlay** | Localhost | Offline randomized 16-tile accessible memory game | Verified in Microsoft Edge |
 | **CyberArena** | Localhost | Offline defensive security exercises (encoding, integrity, least privilege) | Verified in Microsoft Edge |
