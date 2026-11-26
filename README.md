@@ -12,6 +12,16 @@
 
 📖 **Read the complete technical manual in [DOCUMENTATION.md](DOCUMENTATION.md).**
 
+## PocketOS on Mobile
+
+PocketOS runs in a phone browser connected directly to the NEXUS-S3 management network. These captures show firmware `0.3.0-dev.1` in the green dark theme.
+
+| Device Overview | Standalone Field Mode | CyberDeck |
+| :---: | :---: | :---: |
+| <a href="docs/screenshots/overview.jpg"><img src="docs/screenshots/overview.jpg" width="230" alt="PocketOS overview showing temperature, free memory, uptime, and Guard status"></a> | <a href="docs/screenshots/settings-field-mode.jpg"><img src="docs/screenshots/settings-field-mode.jpg" width="230" alt="Unlocked Field Mode settings with telemetry and management controls"></a> | <a href="docs/screenshots/cyberdeck-checks.jpg"><img src="docs/screenshots/cyberdeck-checks.jpg" width="230" alt="CyberDeck results for board identity, telemetry, Guard, and Wi-Fi settings"></a> |
+
+**[View the full PocketOS screenshot gallery](docs/pocketos-screenshots.md)**
+
 ---
 
 ## Architecture at a Glance
